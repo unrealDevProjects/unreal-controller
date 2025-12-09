@@ -1,0 +1,218 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Unreal Web Joystick + Jump</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            touch-action: none;
+        }
+
+        .controller-container {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 30px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .connect-btn {
+            padding: 10px 20px;
+            border-radius: 20px;
+            border: none;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+            cursor: pointer;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4444;
+        }
+
+            .status-indicator.connected {
+                background: #44ff44;
+            }
+
+        #jumpBtn {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            font-size: 20px;
+            color: white;
+            background: linear-gradient(135deg,#f093fb 0%,#f5576c 100%);
+            border: 3px solid rgba(255,255,255,0.3);
+            margin-bottom: 20px;
+            touch-action: manipulation;
+            user-select: none;
+        }
+
+        #joystickZone {
+            width: 200px;
+            height: 200px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 50%;
+            position: relative;
+            touch-action: none;
+        }
+
+        #stick {
+            width: 80px;
+            height: 80px;
+            background: rgba(255,255,255,0.6);
+            border-radius: 50%;
+            position: absolute;
+            left: 60px;
+            top: 60px;
+            transition: 0.05s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="controller-container">
+        <div class="status-bar">
+            <button id="connectBtn" class="connect-btn">Conectar</button>
+            <div id="statusIndicator" class="status-indicator"></div>
+        </div>
+
+        <!-- Botón Jump -->
+        <button id="jumpBtn">JUMP</button>
+
+        <!-- Joystick -->
+        <div id="joystickZone">
+            <div id="stick"></div>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let playerID = localStorage.getItem("playerID");
+        if (!playerID) {
+            playerID = crypto.randomUUID();
+            localStorage.setItem("playerID", playerID);
+        }
+
+        const connectBtn = document.getElementById("connectBtn");
+        const statusIndicator = document.getElementById("statusIndicator");
+
+        connectBtn.addEventListener("click", () => {
+            socket = new WebSocket("ws://192.168.4.109:8081");
+
+            socket.onopen = () => {
+                console.log("Conectado al servidor WebSocket");
+                statusIndicator.classList.add("connected");
+                connectBtn.textContent = "Conectado";
+                socket.send("NewPlayer:" + playerID);
+                console.log("Web → Node.js: NewPlayer:" + playerID);
+            };
+
+            socket.onclose = () => {
+                statusIndicator.classList.remove("connected");
+                connectBtn.textContent = "Conectar";
+            };
+
+            socket.onerror = () => {
+                statusIndicator.classList.remove("connected");
+                connectBtn.textContent = "Error - Reintentar";
+            };
+        });
+
+        function sendInput(input) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(playerID + "|" + input);
+                console.log("Web → Node.js:", playerID + "|" + input);
+            }
+        }
+
+        // JUMP
+        const jumpBtn = document.getElementById("jumpBtn");
+        jumpBtn.addEventListener("touchstart", () => sendInput("Jump"));
+        jumpBtn.addEventListener("mousedown", () => sendInput("Jump"));
+
+        // JOYSTICK
+        const joyZone = document.getElementById("joystickZone");
+        const stick = document.getElementById("stick");
+        const center = { x: 100, y: 100 };
+        const radius = 100;
+
+        function updateStick(x, y) {
+            stick.style.left = (x + center.x - 40) + "px";
+            stick.style.top = (y + center.y - 40) + "px";
+        }
+
+        function normalize(x, y) {
+            let nx = x / radius;
+            let ny = y / radius;
+            if (nx > 1) nx = 1; if (nx < -1) nx = -1;
+            if (ny > 1) ny = 1; if (ny < -1) ny = -1;
+            return { nx, ny };
+        }
+
+        function handleMove(touchX, touchY) {
+            let rect = joyZone.getBoundingClientRect();
+            let x = touchX - rect.left - center.x;
+            let y = touchY - rect.top - center.y;
+
+            let dist = Math.sqrt(x * x + y * y);
+            if (dist > radius) {
+                x = (x / dist) * radius;
+                y = (y / dist) * radius;
+            }
+
+            updateStick(x, y);
+
+            let { nx, ny } = normalize(x, y);
+            sendInput(`Move:${nx.toFixed(2)}:${(-ny).toFixed(2)}`);
+        }
+
+        joyZone.addEventListener("touchstart", (e) => e.preventDefault());
+        joyZone.addEventListener("touchmove", (e) => {
+            e.preventDefault();
+            let touch = e.touches[0];
+            handleMove(touch.clientX, touch.clientY);
+        });
+        joyZone.addEventListener("touchend", () => {
+            updateStick(0, 0);
+            sendInput("Move:0:0");
+        });
+
+        joyZone.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            handleMove(e.clientX, e.clientY);
+            function mouseMove(e) { handleMove(e.clientX, e.clientY); }
+            function mouseUp() { updateStick(0, 0); sendInput("Move:0:0"); window.removeEventListener("mousemove", mouseMove); window.removeEventListener("mouseup", mouseUp); }
+            window.addEventListener("mousemove", mouseMove);
+            window.addEventListener("mouseup", mouseUp);
+        });
+    </script>
+</body>
+</html>
