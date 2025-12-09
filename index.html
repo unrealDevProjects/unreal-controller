@@ -10,7 +10,7 @@
     <style>
       * {
         margin: 0;
-        padding: 0 2rem;
+        padding: 0;
         box-sizing: border-box;
         -webkit-tap-highlight-color: transparent;
       }
@@ -66,6 +66,53 @@
         background: #44ff44;
       }
 
+      .config-panel {
+        background: rgba(0, 0, 0, 0.2);
+        padding: 15px;
+        border-radius: 15px;
+        margin-bottom: 20px;
+        width: 100%;
+        display: none;
+      }
+
+      .config-panel.active {
+        display: block;
+      }
+
+      .config-input-group {
+        margin-bottom: 10px;
+      }
+
+      .config-input-group label {
+        display: block;
+        color: white;
+        font-size: 12px;
+        margin-bottom: 5px;
+      }
+
+      .config-input-group input {
+        width: 100%;
+        padding: 8px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        font-size: 14px;
+      }
+
+      .config-input-group input::placeholder {
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      .config-toggle {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.8);
+        cursor: pointer;
+        text-decoration: underline;
+        margin-top: 10px;
+        display: block;
+      }
+
       #jumpBtn {
         width: 100px;
         height: 100px;
@@ -115,6 +162,41 @@
         ></div>
       </div>
 
+      <!-- Panel de Configuración -->
+      <div
+        id="configPanel"
+        class="config-panel"
+      >
+        <div class="config-input-group">
+          <label for="serverIP">IP del Servidor:</label>
+          <input
+            type="text"
+            id="serverIP"
+            placeholder="Ej: 192.168.4.109 o tu-ip-publica.com"
+          />
+        </div>
+        <div class="config-input-group">
+          <label for="serverPort">Puerto:</label>
+          <input
+            type="text"
+            id="serverPort"
+            placeholder="Ej: 8081"
+          />
+        </div>
+        <span
+          id="configToggle"
+          class="config-toggle"
+          >Ocultar configuración</span
+        >
+      </div>
+
+      <span
+        id="showConfig"
+        class="config-toggle"
+        style="display: block; margin-bottom: 10px"
+        >Mostrar configuración</span
+      >
+
       <!-- Botón Jump -->
       <button id="jumpBtn">JUMP</button>
 
@@ -132,11 +214,51 @@
         localStorage.setItem('playerID', playerID);
       }
 
+      // Cargar configuración guardada
+      const savedIP = localStorage.getItem('serverIP') || '192.168.4.109';
+      const savedPort = localStorage.getItem('serverPort') || '8081';
+
       const connectBtn = document.getElementById('connectBtn');
       const statusIndicator = document.getElementById('statusIndicator');
+      const configPanel = document.getElementById('configPanel');
+      const showConfigBtn = document.getElementById('showConfig');
+      const configToggle = document.getElementById('configToggle');
+      const serverIPInput = document.getElementById('serverIP');
+      const serverPortInput = document.getElementById('serverPort');
+
+      // Cargar valores guardados en los inputs
+      serverIPInput.value = savedIP;
+      serverPortInput.value = savedPort;
+
+      // Toggle del panel de configuración
+      showConfigBtn.addEventListener('click', () => {
+        configPanel.classList.add('active');
+        showConfigBtn.style.display = 'none';
+      });
+
+      configToggle.addEventListener('click', () => {
+        configPanel.classList.remove('active');
+        showConfigBtn.style.display = 'block';
+      });
+
+      // Guardar configuración cuando cambie
+      serverIPInput.addEventListener('change', () => {
+        localStorage.setItem('serverIP', serverIPInput.value);
+      });
+
+      serverPortInput.addEventListener('change', () => {
+        localStorage.setItem('serverPort', serverPortInput.value);
+      });
 
       connectBtn.addEventListener('click', () => {
-        socket = new WebSocket('ws://192.168.4.109:8081');
+        const serverIP = serverIPInput.value || savedIP;
+        const serverPort = serverPortInput.value || savedPort;
+        const wsProtocol =
+          window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsURL = `${wsProtocol}//${serverIP}:${serverPort}`;
+
+        console.log('Intentando conectar a:', wsURL);
+        socket = new WebSocket(wsURL);
 
         socket.onopen = () => {
           console.log('Conectado al servidor WebSocket');
